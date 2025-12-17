@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Haleon Budget Sufficiency Sync Tool
+Haleon Data Sync Tool
 Streamlit app to sync PPT with Excel data
 """
 
@@ -444,7 +444,7 @@ def inject_custom_css():
 
 def main():
     st.set_page_config(
-        page_title="Haleon Budget Sync",
+        page_title="Haleon Data Sync",
         page_icon="📊",
         layout="centered"
     )
@@ -453,8 +453,8 @@ def main():
 
     # Gradient title
     st.markdown("""
-    <div class="gradient-title">Haleon MEA Budget<br>Sufficiency Sync</div>
-    <div class="subtitle">Transform Excel budget data into PowerPoint presentations</div>
+    <div class="gradient-title">Haleon MEA Data<br>Sufficiency Sync</div>
+    <div class="subtitle">Transform Excel data into PowerPoint presentations</div>
     """, unsafe_allow_html=True)
 
     # How to use card with status badges
@@ -492,7 +492,7 @@ def main():
             <div class="feature-item">
                 <div class="feature-icon">📊</div>
                 <div class="feature-title">Grand Totals</div>
-                <div class="feature-desc">Updates slide 3 with overall budget summary figures</div>
+                <div class="feature-desc">Updates slide 3 with overall summary figures</div>
             </div>
             <div class="feature-item">
                 <div class="feature-icon">🏷️</div>
@@ -518,7 +518,7 @@ def main():
     # File uploaders
     st.markdown("**Upload Excel File**")
     excel_file = st.file_uploader(
-        "Excel file with budget data",
+        "Excel file with data",
         type=['xlsx', 'xlsm'],
         key='excel',
         label_visibility="collapsed"
@@ -624,7 +624,7 @@ def main():
     # Footer
     st.markdown(f"""
     <div class="footer">
-        Haleon MEA Budget Sufficiency Sync • v1.0.0
+        Haleon MEA Data Sufficiency Sync • v1.0.0
     </div>
     """, unsafe_allow_html=True)
 

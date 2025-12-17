@@ -1,6 +1,6 @@
-# Haleon MEA Budget Sufficiency Sync Tool
+# Haleon MEA Data Sync Tool
 
-Sync Excel budget data with PowerPoint presentations while preserving all formatting.
+Sync Excel data with PowerPoint presentations while preserving all formatting.
 
 ## Quick Start
 
@@ -25,21 +25,21 @@ Open http://localhost:8501 in your browser.
 ### 3. Use the App
 1. Upload your Excel file (with "2026 Sufficiency" sheet)
 2. Upload your PowerPoint file
-3. Click **Sync Excel → PPT**
+3. Click **Sync Data**
 4. Download the updated PPT
 
 ## What Gets Synced
 
 | Field | Excel Column | Description |
 |-------|--------------|-------------|
-| 2026 Budget | E | Budget amount |
-| 2026 Sufficient | G | Sufficient amount |
-| Gap (GBP) | H | Gap in pounds |
-| Gap (%) | I | Gap percentage |
-| AWA / CON / PUR | J / K / L | CEJ allocations |
-| TV / Digital / Others | R / S / V | Media percentages |
-| Long/Short Campaigns | AD / AF | Campaign counts |
-| Long % | AH | Long campaign percentage |
+| Primary Metric | E | Main value |
+| Secondary Metric | G | Secondary value |
+| Variance | H | Difference |
+| Variance % | I | Percentage difference |
+| AWA / CON / PUR | J / K / L | Category allocations |
+| Channel 1 / 2 / 3 | R / S / V | Distribution percentages |
+| Long/Short Items | AD / AF | Item counts |
+| Long % | AH | Long item percentage |
 
 ## Markets Covered
 
@@ -69,7 +69,7 @@ Each sync creates:
 source .venv/bin/activate
 python scripts/update_ppt_from_excel.py \
     --ppt "path/to/presentation.pptx" \
-    --excel "path/to/budget.xlsx" \
+    --excel "path/to/data.xlsx" \
     --output-dir output
 ```
 
@@ -90,16 +90,16 @@ python scripts/update_ppt_from_excel.py \
 
 ## How It Works
 
-1. **Reads Excel**: Extracts values from "2026 Sufficiency" sheet
+1. **Reads Excel**: Extracts values from data sheet
 2. **Finds PPT Tables**: Locates data tables by detecting CATEGORY/BRAND columns
-3. **Matches Brands**: Links Excel rows to PPT rows by brand name
+3. **Matches Rows**: Links Excel rows to PPT rows by name
 4. **Updates Text Only**: Changes cell text while preserving all formatting (fonts, colors, borders)
 
 ## Troubleshooting
 
-**"Brand not found in Excel"**
-- Check brand spelling matches between Excel and PPT
-- Verify the brand is in the correct market row range
+**"Item not found in Excel"**
+- Check spelling matches between Excel and PPT
+- Verify the item is in the correct market row range
 
 **Formatting looks different**
 - The tool preserves PPT formatting, but normalizes number display (e.g., removes extra spaces)
