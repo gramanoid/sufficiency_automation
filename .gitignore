@@ -1,0 +1,46 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Data files - don't commit actual data
+input/*.xlsx
+input/*.pptx
+output/*.xlsx
+output/*.pptx
+output/*.pdf
+output/*.png
+output/*.json
+output/data/*.json
+output/reports/*.json
+output/reports/*.md
+output/reports/*.xlsx
+
+# Keep directory structure
+!input/.gitkeep
+!output/.gitkeep
+!output/data/.gitkeep
+!output/reports/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Logs
+*.log
