@@ -284,17 +284,18 @@ def inject_custom_css():
 
     .feature-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1rem;
-        margin-top: 1rem;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.75rem;
+        margin-top: 0.75rem;
     }
 
     .feature-item {
         background: rgba(255, 255, 255, 0.03);
         border-radius: 8px;
-        padding: 1rem;
+        padding: 0.75rem;
         transition: all 0.3s ease;
         border: 1px solid transparent;
+        text-align: center;
     }
 
     .feature-item:hover {
@@ -304,21 +305,21 @@ def inject_custom_css():
     }
 
     .feature-icon {
-        font-size: 1.5rem;
-        margin-bottom: 0.5rem;
+        font-size: 1.25rem;
+        margin-bottom: 0.35rem;
     }
 
     .feature-title {
         color: #E5E5E5;
         font-weight: 600;
-        font-size: 0.95rem;
-        margin-bottom: 0.25rem;
+        font-size: 0.8rem;
+        margin-bottom: 0.2rem;
     }
 
     .feature-desc {
         color: #888;
-        font-size: 0.85rem;
-        line-height: 1.4;
+        font-size: 0.7rem;
+        line-height: 1.3;
     }
 
     /* File uploader styling */
@@ -457,9 +458,8 @@ def main():
     <div class="subtitle">Transform Excel data into PowerPoint presentations</div>
     """, unsafe_allow_html=True)
 
-    # How to use card with status badges
-    markets = list(MARKET_ROW_RANGES.keys())
-    st.markdown(f"""
+    # How to use card (no status badges)
+    st.markdown("""
     <div class="info-card">
         <div class="card-header">HOW TO USE</div>
         <div class="step-list">
@@ -476,15 +476,31 @@ def main():
                 Click <span class="badge badge-pink">Sync Data</span> and download your updated deck
             </div>
         </div>
-        <div class="status-badges">
-            <span class="status-badge badge-green">✓ {len(markets)} Markets</span>
-            <span class="status-badge badge-blue-filled">📊 3 Table Types</span>
-            <span class="status-badge badge-pink-filled">⚡ Auto-Labeling ON</span>
-        </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # How it works explanation
+    # File uploaders (immediately after HOW TO USE)
+    st.markdown("**Upload Excel File**")
+    excel_file = st.file_uploader(
+        "Excel file with data",
+        type=['xlsx', 'xlsm'],
+        key='excel',
+        label_visibility="collapsed"
+    )
+    if excel_file:
+        st.success(f"✓ {excel_file.name}")
+
+    st.markdown("**Upload PowerPoint File**")
+    ppt_file = st.file_uploader(
+        "PPT file to update",
+        type=['pptx'],
+        key='ppt',
+        label_visibility="collapsed"
+    )
+    if ppt_file:
+        st.success(f"✓ {ppt_file.name}")
+
+    # How it works explanation (after uploaders)
     st.markdown("""
     <div class="how-it-works">
         <div class="how-header">HOW IT WORKS</div>
@@ -512,29 +528,6 @@ def main():
         </div>
     </div>
     """, unsafe_allow_html=True)
-
-    st.divider()
-
-    # File uploaders
-    st.markdown("**Upload Excel File**")
-    excel_file = st.file_uploader(
-        "Excel file with data",
-        type=['xlsx', 'xlsm'],
-        key='excel',
-        label_visibility="collapsed"
-    )
-    if excel_file:
-        st.success(f"✓ {excel_file.name}")
-
-    st.markdown("**Upload PowerPoint File**")
-    ppt_file = st.file_uploader(
-        "PPT file to update",
-        type=['pptx'],
-        key='ppt',
-        label_visibility="collapsed"
-    )
-    if ppt_file:
-        st.success(f"✓ {ppt_file.name}")
 
     # Sync button
     if excel_file and ppt_file:
