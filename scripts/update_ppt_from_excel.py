@@ -3,6 +3,11 @@
 Update PPT from Excel - Syncs PPT tables with Excel data
 Preserves ALL PPT formatting (fonts, colors, borders, cell sizes)
 Only updates text values in table cells
+
+Supports:
+- Brand detail tables (per market, slides 22+)
+- Brand-by-market summary tables (slides 15-18)
+- Grand total text boxes (slide 3)
 """
 
 import json
@@ -46,7 +51,7 @@ MARKET_ROW_RANGES = {
     'NIGERIA': (58, 59),
 }
 
-# PPT data column names (after brand column)
+# PPT data column names (after brand column for detail tables)
 PPT_DATA_FIELDS = [
     'budget_2026',
     'sufficient_2026',
@@ -63,6 +68,14 @@ PPT_DATA_FIELDS = [
     'long_pct',
 ]
 
+# Brand name aliases for matching
+BRAND_ALIASES = {
+    'PANADOL': ['PANADOL PAIN', 'PANADOL'],
+    'SENSODYNE': ['SENSODYNE'],
+    'PARODONTAX': ['PARODONTAX'],
+    'CENTRUM': ['CENTRUM'],
+}
+
 
 def normalize_brand(s):
     """Normalize brand name for matching"""
@@ -70,7 +83,6 @@ def normalize_brand(s):
         return ''
     s = str(s).strip().upper()
     s = s.replace('-', ' ').replace('  ', ' ')
-    # Handle known aliases
     aliases = {
         'GRANDPA': 'GRAND PA',
         'GRAND-PA': 'GRAND PA',
@@ -80,6 +92,17 @@ def normalize_brand(s):
         if k in s:
             s = s.replace(k, v)
     return s.strip()
+
+
+def normalize_market(s):
+    """Normalize market name for matching"""
+    if not s:
+        return ''
+    s = str(s).strip().upper()
+    # Handle variations
+    if 'SOUTH' in s and 'AFRICA' in s:
+        return 'SOUTH AFRICA'
+    return s
 
 
 def extract_market_from_slide(slide):
@@ -100,40 +123,56 @@ def extract_market_from_slide(slide):
     return None
 
 
+def extract_brand_from_slide(slide):
+    """Extract brand name from slide text for brand-by-market tables"""
+    brands = ['SENSODYNE', 'PARODONTAX', 'PANADOL', 'CENTRUM']
+    
+    all_text = []
+    for shape in slide.shapes:
+        if hasattr(shape, "text"):
+            all_text.append(shape.text.upper())
+    
+    full_text = ' '.join(all_text)
+    
+    for brand in brands:
+        if brand in full_text:
+            return brand
+    return None
+
+
 def detect_table_format(table):
     """
-    Detect table format and return (is_brand_table, brand_col_idx, data_start_col)
+    Detect table format and return format info.
     
-    Returns None if not a brand-level data table.
+    Returns:
+        ('brand_detail', brand_col, data_start_col) - for per-market brand tables
+        ('brand_by_market', data_start_col) - for brand summary by market tables
+        None - if not a recognized data table
     """
     if len(table.rows) < 2:
         return None
     
-    # Get header text
     header_cells = [table.rows[0].cells[i].text.upper().strip() 
                    for i in range(min(5, len(table.rows[0].cells)))]
     
-    # Check for brand-level table (must have CATEGORY and BRAND)
+    # Check for brand-by-market table (MARKET in first column, no BRAND/CATEGORY)
+    if header_cells[0] == 'MARKET' and 'BRAND' not in ' '.join(header_cells):
+        return ('brand_by_market', 1)  # data starts at column 1
+    
+    # Check for brand detail table (has BRAND column)
     has_brand = any('BRAND' in h for h in header_cells)
-    has_category = any('CATEGORY' in h for h in header_cells)
     
-    if not has_brand:
-        return None
+    if has_brand:
+        brand_col = None
+        for i, h in enumerate(header_cells):
+            if 'BRAND' in h and 'LONG' not in h:
+                brand_col = i
+                break
+        
+        if brand_col is not None:
+            return ('brand_detail', brand_col, brand_col + 1)
     
-    # Find brand column index
-    brand_col = None
-    for i, h in enumerate(header_cells):
-        if 'BRAND' in h and 'LONG' not in h:
-            brand_col = i
-            break
-    
-    if brand_col is None:
-        return None
-    
-    # Data starts after brand column
-    data_start_col = brand_col + 1
-    
-    return (True, brand_col, data_start_col)
+    return None
 
 
 def format_value(value, field_type, original_text=''):
@@ -149,7 +188,6 @@ def format_value(value, field_type, original_text=''):
     if field_type == 'currency':
         if val == 0:
             return '-'
-        # Preserve original format style
         if '£' in original_text:
             if val < 0:
                 return f"-£{abs(val):,.0f}"
@@ -173,6 +211,17 @@ def format_value(value, field_type, original_text=''):
         return str(int_val)
 
     return str(value)
+
+
+def format_millions(value):
+    """Format value as millions for grand total boxes"""
+    if value is None:
+        return '0'
+    try:
+        val = float(value)
+        return f"{val / 1_000_000:.1f}"
+    except (ValueError, TypeError):
+        return '0'
 
 
 def get_field_type(field_name):
@@ -200,6 +249,20 @@ def update_cell_text(cell, new_text):
         para.text = new_text
 
     return True
+
+
+def update_shape_text(shape, old_pattern, new_value):
+    """Update text in a shape matching a pattern"""
+    if not hasattr(shape, 'text_frame'):
+        return False
+    
+    for para in shape.text_frame.paragraphs:
+        for run in para.runs:
+            if old_pattern in run.text:
+                # Replace the number portion
+                run.text = re.sub(r'[\d.]+\s*M', f'{new_value} M', run.text)
+                return True
+    return False
 
 
 def read_excel_data(excel_path):
@@ -230,6 +293,48 @@ def read_excel_data(excel_path):
     return data
 
 
+def aggregate_by_brand(excel_data, target_brand):
+    """Aggregate data for a specific brand across all markets"""
+    result = {}  # market -> field -> value
+    
+    target_normalized = normalize_brand(target_brand)
+    
+    # Get brand aliases
+    brand_matches = [target_normalized]
+    for key, aliases in BRAND_ALIASES.items():
+        if target_normalized in [normalize_brand(a) for a in aliases]:
+            brand_matches = [normalize_brand(a) for a in aliases]
+            break
+    
+    for market, brands in excel_data.items():
+        for brand_name, brand_data in brands.items():
+            if any(m in brand_name or brand_name in m for m in brand_matches):
+                result[market] = {}
+                for field in PPT_DATA_FIELDS:
+                    result[market][field] = brand_data.get(field)
+                break
+    
+    return result
+
+
+def calculate_grand_totals(excel_data):
+    """Calculate grand totals across all markets and brands"""
+    total_budget = 0
+    total_sufficient = 0
+    
+    for market, brands in excel_data.items():
+        for brand_name, brand_data in brands.items():
+            budget = brand_data.get('budget_2026') or 0
+            sufficient = brand_data.get('sufficient_2026') or 0
+            total_budget += budget
+            total_sufficient += sufficient
+    
+    return {
+        'budget': total_budget,
+        'sufficient': total_sufficient,
+    }
+
+
 def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
     """Main function to update PPT from Excel data"""
 
@@ -250,6 +355,9 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
 
     # Read Excel data
     excel_data = read_excel_data(excel_path)
+    
+    # Calculate grand totals
+    grand_totals = calculate_grand_totals(excel_data)
 
     # Open PPT
     prs = Presentation(ppt_path)
@@ -262,6 +370,102 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
     # Process each slide
     for slide_idx, slide in enumerate(prs.slides):
         slide_num = slide_idx + 1
+        
+        # === SLIDE 3: Grand Total Boxes ===
+        if slide_num == 3:
+            for shape in slide.shapes:
+                if hasattr(shape, 'text'):
+                    text = shape.text.upper()
+                    if 'BRIEFED' in text and 'GBP' in text:
+                        new_val = format_millions(grand_totals['budget'])
+                        if update_shape_text(shape, 'GBP', new_val):
+                            cells_updated += 1
+                            changes_log.append({
+                                'slide': slide_num,
+                                'type': 'grand_total',
+                                'field': 'budget',
+                                'new_value': f"GBP {new_val} M"
+                            })
+                    elif 'SUFFICIENT' in text and 'GBP' in text:
+                        new_val = format_millions(grand_totals['sufficient'])
+                        if update_shape_text(shape, 'GBP', new_val):
+                            cells_updated += 1
+                            changes_log.append({
+                                'slide': slide_num,
+                                'type': 'grand_total',
+                                'field': 'sufficient',
+                                'new_value': f"GBP {new_val} M"
+                            })
+            continue
+        
+        # === SLIDES 15-18: Brand-by-Market Tables ===
+        slide_brand = extract_brand_from_slide(slide)
+        
+        if slide_brand and slide_num < 22:
+            # Get aggregated data for this brand
+            brand_market_data = aggregate_by_brand(excel_data, slide_brand)
+            
+            for shape in slide.shapes:
+                if not shape.has_table:
+                    continue
+                
+                table = shape.table
+                table_format = detect_table_format(table)
+                
+                if not table_format or table_format[0] != 'brand_by_market':
+                    continue
+                
+                data_start_col = table_format[1]
+                slides_processed += 1
+                
+                # Process each row (skip header)
+                for row_idx in range(1, len(table.rows)):
+                    row = table.rows[row_idx]
+                    market_text = row.cells[0].text.strip()
+                    
+                    if not market_text or 'TOTAL' in market_text.upper():
+                        continue
+                    
+                    market_normalized = normalize_market(market_text)
+                    
+                    if market_normalized not in brand_market_data:
+                        continue
+                    
+                    market_data = brand_market_data[market_normalized]
+                    
+                    # Update each data column
+                    for field_idx, field_name in enumerate(PPT_DATA_FIELDS):
+                        col_idx = data_start_col + field_idx
+                        
+                        if col_idx >= len(row.cells):
+                            break
+                        
+                        if field_name not in market_data:
+                            continue
+                        
+                        excel_value = market_data[field_name]
+                        cell = row.cells[col_idx]
+                        original_text = cell.text.strip()
+                        
+                        field_type = get_field_type(field_name)
+                        new_text = format_value(excel_value, field_type, original_text)
+                        
+                        if original_text != new_text:
+                            update_cell_text(cell, new_text)
+                            cells_updated += 1
+                            
+                            changes_log.append({
+                                'slide': slide_num,
+                                'type': 'brand_by_market',
+                                'brand': slide_brand,
+                                'market': market_text,
+                                'field': field_name,
+                                'old_value': original_text,
+                                'new_value': new_text,
+                            })
+            continue
+        
+        # === SLIDES 22+: Brand Detail Tables (per market) ===
         market = extract_market_from_slide(slide)
 
         if not market or market not in excel_data:
@@ -269,7 +473,6 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
 
         market_data = excel_data[market]
 
-        # Find tables on slide
         for shape in slide.shapes:
             if not shape.has_table:
                 continue
@@ -277,17 +480,15 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
             table = shape.table
             table_format = detect_table_format(table)
             
-            if not table_format:
+            if not table_format or table_format[0] != 'brand_detail':
                 continue
             
-            is_brand_table, brand_col, data_start_col = table_format
+            _, brand_col, data_start_col = table_format
             slides_processed += 1
 
-            # Process each row (skip header)
             for row_idx in range(1, len(table.rows)):
                 row = table.rows[row_idx]
 
-                # Get brand from brand column
                 if brand_col >= len(row.cells):
                     continue
                     
@@ -298,13 +499,11 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
 
                 normalized_brand = normalize_brand(brand_text)
 
-                # Find matching Excel data
                 excel_brand_data = None
                 for excel_brand, data in market_data.items():
                     if normalize_brand(excel_brand) == normalized_brand:
                         excel_brand_data = data
                         break
-                    # Partial match fallback
                     if normalized_brand in excel_brand or excel_brand in normalized_brand:
                         excel_brand_data = data
                         break
@@ -313,7 +512,6 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
                     warnings.append(f"Slide {slide_num}: Brand '{brand_text}' ({market}) not found in Excel")
                     continue
 
-                # Update each data column
                 for field_idx, field_name in enumerate(PPT_DATA_FIELDS):
                     col_idx = data_start_col + field_idx
                     
@@ -330,13 +528,13 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
                     field_type = get_field_type(field_name)
                     new_text = format_value(excel_value, field_type, original_text)
 
-                    # Check if update needed
                     if original_text != new_text:
                         update_cell_text(cell, new_text)
                         cells_updated += 1
 
                         changes_log.append({
                             'slide': slide_num,
+                            'type': 'brand_detail',
                             'market': market,
                             'brand': brand_text,
                             'field': field_name,
@@ -361,6 +559,7 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
             'slides_processed': slides_processed,
             'cells_updated': cells_updated,
             'warnings_count': len(warnings),
+            'grand_totals': grand_totals,
         },
         'changes': changes_log,
         'warnings': warnings,
@@ -412,11 +611,17 @@ def main():
 
     if result['changes']:
         print("\n--- Sample Changes ---")
-        for c in result['changes'][:10]:
-            print(f"  Slide {c['slide']}: {c['brand']} / {c['field']}")
-            print(f"    {c['old_value']} -> {c['new_value']}")
-        if len(result['changes']) > 10:
-            print(f"  ... and {len(result['changes']) - 10} more")
+        for c in result['changes'][:15]:
+            if c.get('type') == 'grand_total':
+                print(f"  Slide {c['slide']}: Grand Total {c['field']} = {c['new_value']}")
+            elif c.get('type') == 'brand_by_market':
+                print(f"  Slide {c['slide']}: {c['brand']} / {c['market']} / {c['field']}")
+                print(f"    {c['old_value']} -> {c['new_value']}")
+            else:
+                print(f"  Slide {c['slide']}: {c.get('brand', 'N/A')} / {c['field']}")
+                print(f"    {c['old_value']} -> {c['new_value']}")
+        if len(result['changes']) > 15:
+            print(f"  ... and {len(result['changes']) - 15} more")
 
 
 if __name__ == '__main__':
