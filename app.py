@@ -6,14 +6,13 @@ Streamlit app to sync PPT with Excel data
 
 import streamlit as st
 import tempfile
-import shutil
 from pathlib import Path
 from datetime import datetime
 
 # Import the core sync function
 import sys
 sys.path.insert(0, str(Path(__file__).parent / 'scripts'))
-from update_ppt_from_excel import update_ppt_from_excel, read_excel_data, MARKET_ROW_RANGES
+from update_ppt_from_excel import update_ppt_from_excel, MARKET_ROW_RANGES
 
 
 def main():
@@ -97,21 +96,39 @@ def main():
                                     for w in result['warnings']:
                                         st.warning(w)
 
-                            # Changes by market
+                            # Changes breakdown
                             if result['changes']:
-                                with st.expander("📝 Changes by Market"):
-                                    changes_by_market = {}
-                                    for c in result['changes']:
-                                        market = c['market']
-                                        if market not in changes_by_market:
-                                            changes_by_market[market] = []
-                                        changes_by_market[market].append(c)
+                                # Group by type
+                                grand_totals = [c for c in result['changes'] if c.get('type') == 'grand_total']
+                                brand_by_market = [c for c in result['changes'] if c.get('type') == 'brand_by_market']
+                                brand_detail = [c for c in result['changes'] if c.get('type') == 'brand_detail']
+                                
+                                with st.expander("📝 Changes Summary"):
+                                    # Grand totals
+                                    if grand_totals:
+                                        st.markdown("**Grand Totals (Slide 3)**")
+                                        for c in grand_totals:
+                                            st.markdown(f"- {c['field'].replace('_', ' ').title()}: {c['new_value']}")
+                                    
+                                    # Brand-by-market tables
+                                    if brand_by_market:
+                                        st.markdown(f"**Brand-by-Market Tables** ({len(brand_by_market)} updates)")
+                                        brands_updated = set(c['brand'] for c in brand_by_market)
+                                        st.caption(f"Brands: {', '.join(sorted(brands_updated))}")
+                                    
+                                    # Brand detail tables
+                                    if brand_detail:
+                                        st.markdown(f"**Brand Detail Tables** ({len(brand_detail)} updates)")
+                                        changes_by_market = {}
+                                        for c in brand_detail:
+                                            market = c.get('market', 'Unknown')
+                                            if market not in changes_by_market:
+                                                changes_by_market[market] = []
+                                            changes_by_market[market].append(c)
 
-                                    for market, changes in sorted(changes_by_market.items()):
-                                        st.markdown(f"**{market}** ({len(changes)} changes)")
-                                        # Group by brand
-                                        brands = set(c['brand'] for c in changes)
-                                        st.caption(f"Brands: {', '.join(sorted(brands))}")
+                                        for market, changes in sorted(changes_by_market.items()):
+                                            brands = set(c['brand'] for c in changes)
+                                            st.markdown(f"- **{market}**: {len(changes)} changes ({', '.join(sorted(brands))})")
 
                             # Download button
                             with open(result['output_ppt'], 'rb') as f:
@@ -153,6 +170,11 @@ def main():
     st.divider()
     with st.expander("ℹ️ How it works"):
         st.markdown("""
+        ### Slides Updated
+        - **Slide 3**: Grand total boxes (Briefed Budget, 100% Sufficient)
+        - **Slides 15-18**: Brand-by-market summary tables (Sensodyne, Parodontax, Panadol, Centrum)
+        - **Slides 22+**: Brand detail tables per market
+        
         ### Data Flow
         1. **Excel** contains the source budget data (2026 Sufficiency sheet)
         2. **PowerPoint** contains the presentation with data tables
