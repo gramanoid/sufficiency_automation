@@ -94,8 +94,8 @@ def inject_custom_css():
     .info-card {
         background: #1A1D24;
         border-radius: 12px;
-        padding: 1.5rem 2rem;
-        margin: 1.5rem 0;
+        padding: 1.25rem 1.5rem;
+        margin: 1rem 0 0.75rem 0;
         animation: fadeInUp 0.8s ease-out 0.3s both;
         transition: transform 0.3s ease, box-shadow 0.3s ease;
     }
@@ -233,16 +233,16 @@ def inject_custom_css():
     /* Status badges row */
     .status-badges {
         display: flex;
-        gap: 1rem;
-        margin: 1.5rem 0;
+        gap: 0.75rem;
+        margin: 1rem 0 0 0;
         flex-wrap: wrap;
         animation: fadeInUp 0.8s ease-out 0.5s both;
     }
 
     .status-badge {
-        padding: 0.5rem 1rem;
+        padding: 0.4rem 0.85rem;
         border-radius: 8px;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         font-weight: 500;
         cursor: default;
         transition: all 0.3s ease;
@@ -256,8 +256,8 @@ def inject_custom_css():
     .how-it-works {
         background: linear-gradient(135deg, #1A1D24 0%, #252830 100%);
         border-radius: 12px;
-        padding: 1.5rem 2rem;
-        margin: 1.5rem 0;
+        padding: 1.25rem 1.5rem;
+        margin: 0.5rem 0 0.75rem 0;
         border: 1px solid #333;
         animation: fadeInUp 0.8s ease-out 0.4s both;
     }
@@ -457,8 +457,9 @@ def main():
     <div class="subtitle">Transform Excel budget data into PowerPoint presentations</div>
     """, unsafe_allow_html=True)
 
-    # How to use card
-    st.markdown("""
+    # How to use card with status badges
+    markets = list(MARKET_ROW_RANGES.keys())
+    st.markdown(f"""
     <div class="info-card">
         <div class="card-header">HOW TO USE</div>
         <div class="step-list">
@@ -474,6 +475,11 @@ def main():
                 <span class="step-num">3.</span>
                 Click <span class="badge badge-pink">Sync Data</span> and download your updated deck
             </div>
+        </div>
+        <div class="status-badges">
+            <span class="status-badge badge-green">✓ {len(markets)} Markets</span>
+            <span class="status-badge badge-blue-filled">📊 3 Table Types</span>
+            <span class="status-badge badge-pink-filled">⚡ Auto-Labeling ON</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -520,8 +526,6 @@ def main():
     if excel_file:
         st.success(f"✓ {excel_file.name}")
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
     st.markdown("**Upload PowerPoint File**")
     ppt_file = st.file_uploader(
         "PPT file to update",
@@ -531,8 +535,6 @@ def main():
     )
     if ppt_file:
         st.success(f"✓ {ppt_file.name}")
-
-    st.markdown("<br>", unsafe_allow_html=True)
 
     # Sync button
     if excel_file and ppt_file:
