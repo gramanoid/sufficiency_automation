@@ -17,6 +17,10 @@ from datetime import datetime
 from pathlib import Path
 from openpyxl import load_workbook
 from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN
+from pptx.enum.shapes import MSO_SHAPE
 
 
 # Excel column mapping (1-based)
@@ -265,6 +269,53 @@ def update_shape_text(shape, old_pattern, new_value):
     return False
 
 
+def add_updated_label(slide, timestamp):
+    """Add an 'Updated' label to the top-right corner of a slide"""
+    # Check if label already exists (avoid duplicates)
+    for shape in slide.shapes:
+        if hasattr(shape, 'text') and 'SYNCED' in shape.text:
+            # Update existing label
+            if hasattr(shape, 'text_frame') and shape.text_frame.paragraphs:
+                shape.text_frame.paragraphs[0].runs[0].text = f"SYNCED {timestamp}"
+            return
+    
+    # Create new label - top right corner
+    # Standard slide is 10" x 7.5", position at top right
+    left = Inches(8.0)  # From left edge
+    top = Inches(0.15)   # From top
+    width = Inches(1.8)
+    height = Inches(0.35)
+    
+    # Add rounded rectangle shape
+    shape = slide.shapes.add_shape(
+        MSO_SHAPE.ROUNDED_RECTANGLE,
+        left, top, width, height
+    )
+    
+    # Style the shape - teal background
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = RGBColor(0, 133, 124)  # Haleon teal
+    shape.line.fill.background()  # No border
+    
+    # Add text
+    text_frame = shape.text_frame
+    text_frame.clear()
+    p = text_frame.paragraphs[0]
+    p.alignment = PP_ALIGN.CENTER
+    
+    run = p.add_run()
+    run.text = f"SYNCED {timestamp}"
+    run.font.size = Pt(9)
+    run.font.bold = True
+    run.font.color.rgb = RGBColor(255, 255, 255)  # White text
+    
+    # Vertical centering
+    text_frame.word_wrap = False
+    from pptx.enum.text import MSO_ANCHOR
+    text_frame.auto_size = None
+    text_frame.paragraphs[0].space_before = Pt(2)
+
+
 def read_excel_data(excel_path):
     """Read all brand data from Excel"""
     wb = load_workbook(excel_path, data_only=True)
@@ -366,6 +417,10 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
     warnings = []
     slides_processed = 0
     cells_updated = 0
+    updated_slides = {}  # slide_idx -> slide (track which slides were updated)
+    
+    # Label timestamp (shorter format for display)
+    label_timestamp = datetime.now().strftime('%d/%m %H:%M')
 
     # Process each slide
     for slide_idx, slide in enumerate(prs.slides):
@@ -373,6 +428,7 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
         
         # === SLIDE 3: Grand Total Boxes ===
         if slide_num == 3:
+            slide_updated = False
             for shape in slide.shapes:
                 if hasattr(shape, 'text'):
                     text = shape.text.upper()
@@ -380,6 +436,7 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
                         new_val = format_millions(grand_totals['budget'])
                         if update_shape_text(shape, 'GBP', new_val):
                             cells_updated += 1
+                            slide_updated = True
                             changes_log.append({
                                 'slide': slide_num,
                                 'type': 'grand_total',
@@ -390,12 +447,15 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
                         new_val = format_millions(grand_totals['sufficient'])
                         if update_shape_text(shape, 'GBP', new_val):
                             cells_updated += 1
+                            slide_updated = True
                             changes_log.append({
                                 'slide': slide_num,
                                 'type': 'grand_total',
                                 'field': 'sufficient',
                                 'new_value': f"GBP {new_val} M"
                             })
+            if slide_updated:
+                updated_slides[slide_idx] = slide
             continue
         
         # === SLIDES 15-18: Brand-by-Market Tables ===
@@ -404,6 +464,7 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
         if slide_brand and slide_num < 22:
             # Get aggregated data for this brand
             brand_market_data = aggregate_by_brand(excel_data, slide_brand)
+            slide_updated = False
             
             for shape in slide.shapes:
                 if not shape.has_table:
@@ -453,6 +514,7 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
                         if original_text != new_text:
                             update_cell_text(cell, new_text)
                             cells_updated += 1
+                            slide_updated = True
                             
                             changes_log.append({
                                 'slide': slide_num,
@@ -463,6 +525,9 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
                                 'old_value': original_text,
                                 'new_value': new_text,
                             })
+            
+            if slide_updated:
+                updated_slides[slide_idx] = slide
             continue
         
         # === SLIDES 22+: Brand Detail Tables (per market) ===
@@ -472,6 +537,7 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
             continue
 
         market_data = excel_data[market]
+        slide_updated = False
 
         for shape in slide.shapes:
             if not shape.has_table:
@@ -531,6 +597,7 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
                     if original_text != new_text:
                         update_cell_text(cell, new_text)
                         cells_updated += 1
+                        slide_updated = True
 
                         changes_log.append({
                             'slide': slide_num,
@@ -542,6 +609,13 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
                             'new_value': new_text,
                             'excel_row': excel_brand_data.get('excel_row')
                         })
+        
+        if slide_updated:
+            updated_slides[slide_idx] = slide
+
+    # Add "SYNCED" labels to all updated slides
+    for slide_idx, slide in updated_slides.items():
+        add_updated_label(slide, label_timestamp)
 
     # Save updated PPT
     output_filename = f"{ppt_path.stem}_UPDATED_{timestamp}.pptx"
@@ -557,6 +631,7 @@ def update_ppt_from_excel(ppt_path, excel_path, output_dir=None):
         'backup_ppt': str(backup_path),
         'summary': {
             'slides_processed': slides_processed,
+            'slides_labeled': len(updated_slides),
             'cells_updated': cells_updated,
             'warnings_count': len(warnings),
             'grand_totals': grand_totals,
