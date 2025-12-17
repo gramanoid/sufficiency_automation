@@ -284,7 +284,7 @@ def main():
     st.markdown(f"""
     <div class="status-badges">
         <span class="status-badge badge-green">✓ {len(markets)} Markets</span>
-        <span class="status-badge badge-blue-filled">📄 14 Slides</span>
+        <span class="status-badge badge-blue-filled">📊 3 Table Types</span>
         <span class="status-badge badge-pink-filled">⚡ Auto-Labeling ON</span>
     </div>
     """, unsafe_allow_html=True)
