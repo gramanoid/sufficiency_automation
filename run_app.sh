@@ -10,4 +10,4 @@ source .venv/bin/activate
 echo "Starting Haleon Budget Sync Tool..."
 echo "Open http://localhost:8501 in your browser"
 echo ""
-streamlit run app.py
+streamlit run streamlit_app.py

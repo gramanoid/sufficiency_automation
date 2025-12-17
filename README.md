@@ -17,7 +17,7 @@ pip install -r requirements.txt
 ./run_app.sh
 # Or manually:
 source .venv/bin/activate
-streamlit run app.py
+streamlit run streamlit_app.py
 ```
 
 Open http://localhost:8501 in your browser.
@@ -77,7 +77,7 @@ python scripts/update_ppt_from_excel.py \
 
 ```
 .
-├── app.py                  # Streamlit web application
+├── streamlit_app.py        # Streamlit web application
 ├── run_app.sh              # One-click launcher
 ├── requirements.txt        # Python dependencies
 ├── scripts/
